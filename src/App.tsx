@@ -8,18 +8,18 @@ const PixiRocketLauncher: React.FC = () => {
   const explosionRef = useRef<AnimatedSprite | null>(null);
   const containerRef = useRef<Container | null>(null);
 
-  const [gameState, setGameState] = useState<'idle' | 'shooting' | 'flying' | 'exploding'>('idle');
+  const [gameState, setGameState] = useState<'idle' | 'preparing' | 'shooting' | 'flying' | 'exploding'>('idle');
   const [rocketPosition, setRocketPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     const initPixi = async () => {
       if (!pixiRef.current) return;
 
-      // Create PIXI Application
+      // Create PIXI Application - Full screen
       const app = new Application();
       await app.init({
         width: window.innerWidth,
-        height: window.innerHeight, // Full screen height
+        height: window.innerHeight,
         backgroundColor: 0x001122,
         antialias: true
       });
@@ -39,12 +39,12 @@ const PixiRocketLauncher: React.FC = () => {
       const rocketTexture = Texture.from('rollSequence0000.png'); // First frame of fighter
       const rocket = new Sprite(rocketTexture);
 
-      // Position rocket at bottom center
+      // Position rocket at very bottom (slightly off-screen)
       rocket.x = app.screen.width / 2;
-      rocket.y = app.screen.height - 250; // Near bottom
+      rocket.y = app.screen.height - 120; // Very close to bottom edge
       rocket.anchor.set(0.5, 0.5);
-      rocket.scale.set(2); // Make it bigger
-      rocket.rotation = -Math.PI / 2; // Point upward
+      rocket.scale.set(1); // Make it bigger
+      rocket.rotation = 0; // Keep it vertical (original orientation)
 
       container.addChild(rocket);
       rocketRef.current = rocket;
@@ -122,13 +122,28 @@ const PixiRocketLauncher: React.FC = () => {
     const rocket = rocketRef.current;
     const app = appRef.current;
 
+    if (gameState === 'preparing') {
+      // Move rocket down first (preparation phase)
+      rocket.y += 3;
+
+      // Add engine ignition effect
+      rocket.rotation = Math.sin(Date.now() * 0.02) * 0.1; // Small wobble around vertical
+
+      // After moving down a bit, start shooting up
+      if (rocket.y >= app.screen.height - 5) {
+        setGameState('shooting');
+      }
+
+      setRocketPosition({ x: rocket.x, y: rocket.y });
+    }
+
     if (gameState === 'shooting') {
       // Move rocket up rapidly
-      rocket.y -= 6;
+      rocket.y -= 8;
 
       // Add slight wobble effect
       rocket.x += Math.sin(Date.now() * 0.01) * 1;
-      rocket.rotation = -Math.PI / 2 + Math.sin(Date.now() * 0.008) * 0.05;
+      rocket.rotation = Math.sin(Date.now() * 0.008) * 0.05; // Keep mostly vertical
 
       // Transition to flying state when rocket is halfway up
       if (rocket.y <= app.screen.height / 2) {
@@ -144,7 +159,7 @@ const PixiRocketLauncher: React.FC = () => {
 
       // Add flying movement pattern
       rocket.x += Math.sin(Date.now() * 0.005) * 2;
-      rocket.rotation = -Math.PI / 2 + Math.sin(Date.now() * 0.004) * 0.1;
+      rocket.rotation = Math.sin(Date.now() * 0.004) * 0.1; // Keep mostly vertical
 
       // Auto-explode if reaches very top
       if (rocket.y <= 50) {
@@ -158,12 +173,12 @@ const PixiRocketLauncher: React.FC = () => {
   // Handle shoot button
   const handleShoot = () => {
     if (gameState !== 'idle') return;
-    setGameState('shooting');
+    setGameState('preparing'); // Start with preparation phase
   };
 
   // Handle manual explosion
   const handleExplode = () => {
-    if (gameState !== 'shooting' && gameState !== 'flying') return;
+    if (gameState !== 'preparing' && gameState !== 'shooting' && gameState !== 'flying') return;
 
     if (!rocketRef.current || !explosionRef.current) return;
 
@@ -197,11 +212,11 @@ const PixiRocketLauncher: React.FC = () => {
     const rocket = rocketRef.current;
     const explosion = explosionRef.current;
 
-    // Reset positions to bottom of full screen
+    // Reset positions to very bottom
     rocket.x = appRef.current.screen.width / 2;
-    rocket.y = appRef.current.screen.height - 50;
+    rocket.y = appRef.current.screen.height - 20;
     rocket.visible = true;
-    rocket.rotation = -Math.PI / 2;
+    rocket.rotation = 0; // Reset to vertical
 
     // Hide explosion
     explosion.visible = false;
@@ -211,65 +226,41 @@ const PixiRocketLauncher: React.FC = () => {
   };
 
   return (
-    <div className="w-full bg-gray-900">
-      {/* PIXI Canvas Container - Full Screen */}
+    <div className="h-screen bg-gray-900 relative">
+      {/* PIXI Canvas Container - Full screen */}
       <div ref={pixiRef} className="w-full h-full" />
 
       {/* Control Panel - Fixed at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-800 bg-opacity-90 p-4">
-        <div className="flex items-center justify-between max-w-4xl mx-auto">
-          {/* Status Display */}
-          <div className="text-white">
-            <h2 className="text-xl font-bold mb-1">🚀 Rocket Launcher</h2>
-            <p className="text-sm">
-              Status: <span className="font-semibold text-blue-400">
-                {gameState === 'idle' && '🎯 Ready to Launch'}
-                {gameState === 'shooting' && '🚀 Launching...'}
-                {gameState === 'flying' && '✈️ Flying - Click Explode!'}
-                {gameState === 'exploding' && '💥 BOOM!'}
-              </span>
-            </p>
-            <p className="text-xs text-gray-400">
-              Height: {Math.round((appRef.current?.screen.height || 0) - rocketPosition.y)} / {appRef.current?.screen.height || 0}
-            </p>
-          </div>
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 bg-opacity-90 rounded-lg p-3 shadow-lg">
+        <div className="flex gap-3">
+          <button
+            onClick={handleShoot}
+            disabled={gameState !== 'idle'}
+            className={`px-4 py-2 rounded-lg font-bold text-white transition-all transform hover:scale-105 ${gameState === 'idle'
+              ? 'bg-green-500 hover:bg-green-600 shadow-lg animate-pulse'
+              : 'bg-gray-600 cursor-not-allowed'
+              }`}
+          >
+            🚀 Launch
+          </button>
 
-          {/* Control Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleShoot}
-              disabled={gameState !== 'idle'}
-              className={`px-4 py-2 rounded-lg font-bold text-white transition-all transform hover:scale-105 ${gameState === 'idle'
-                ? 'bg-green-500 hover:bg-green-600 shadow-lg animate-pulse'
-                : 'bg-gray-600 cursor-not-allowed'
-                }`}
-            >
-              🚀 Launch
-            </button>
+          <button
+            onClick={handleExplode}
+            disabled={gameState !== 'shooting' && gameState !== 'flying'}
+            className={`px-4 py-2 rounded-lg font-bold text-white transition-all transform hover:scale-105 ${(gameState === 'shooting' || gameState === 'flying')
+              ? 'bg-red-500 hover:bg-red-600 shadow-lg animate-bounce'
+              : 'bg-gray-600 cursor-not-allowed'
+              }`}
+          >
+            💥 Explode
+          </button>
 
-            <button
-              onClick={handleExplode}
-              disabled={gameState !== 'shooting' && gameState !== 'flying'}
-              className={`px-4 py-2 rounded-lg font-bold text-white transition-all transform hover:scale-105 ${(gameState === 'shooting' || gameState === 'flying')
-                ? 'bg-red-500 hover:bg-red-600 shadow-lg animate-bounce'
-                : 'bg-gray-600 cursor-not-allowed'
-                }`}
-            >
-              💥 Explode
-            </button>
-
-            <button
-              onClick={resetRocket}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg"
-            >
-              🔄 Reset
-            </button>
-          </div>
-        </div>
-
-        {/* Instructions */}
-        <div className="mt-2 text-gray-400 text-xs text-center">
-          <p>1. Click <strong>🚀 Launch</strong> to shoot rocket up • 2. Click <strong>💥 Explode</strong> to detonate • 3. <strong>🔄 Reset</strong> to restart</p>
+          <button
+            onClick={resetRocket}
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold transition-all transform hover:scale-105 shadow-lg"
+          >
+            🔄 Reset
+          </button>
         </div>
       </div>
     </div>
