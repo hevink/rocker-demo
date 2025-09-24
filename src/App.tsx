@@ -7,8 +7,15 @@ const PixiRocketLauncher: React.FC = () => {
   const rocketRef = useRef<Sprite | null>(null);
   const explosionRef = useRef<AnimatedSprite | null>(null);
   const containerRef = useRef<Container | null>(null);
+  const particlesRef = useRef<Graphics[]>([]);
+  const gameStateRef = useRef<'idle' | 'shooting' | 'flying' | 'exploding'>('idle');
 
-  const [gameState, setGameState] = useState<'idle' | 'preparing' | 'shooting' | 'flying' | 'exploding'>('idle');
+  const [gameState, setGameState] = useState<'idle' | 'shooting' | 'flying' | 'exploding'>('idle');
+
+  // Update ref whenever state changes
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
   useEffect(() => {
     const initPixi = async () => {
@@ -96,7 +103,7 @@ const PixiRocketLauncher: React.FC = () => {
         appRef.current.destroy(true);
       }
     };
-  }, [gameState]);
+  }, []); // Remove gameState dependency completely
 
   // Create stars background
   const createStarsBackground = (container: Container, app: Application) => {
@@ -118,21 +125,9 @@ const PixiRocketLauncher: React.FC = () => {
 
     const rocket = rocketRef.current;
     const app = appRef.current;
+    const currentState = gameStateRef.current;
 
-    if (gameState === 'preparing') {
-      // Move rocket down first (preparation phase)
-      rocket.y += 3;
-
-      // Add engine ignition effect
-      rocket.rotation = Math.sin(Date.now() * 0.02) * 0.1; // Small wobble around vertical
-
-      // After moving down a bit, start shooting up
-      if (rocket.y >= app.screen.height - 5) {
-        setGameState('shooting');
-      }
-    }
-
-    if (gameState === 'shooting') {
+    if (currentState === 'shooting') {
       // Move rocket up rapidly
       rocket.y -= 8;
 
@@ -146,7 +141,7 @@ const PixiRocketLauncher: React.FC = () => {
       }
     }
 
-    if (gameState === 'flying') {
+    if (currentState === 'flying') {
       // Continue moving up but slower
       rocket.y -= 3;
 
@@ -161,20 +156,149 @@ const PixiRocketLauncher: React.FC = () => {
     }
   };
 
+  // Create explosion particle effect
+  const createExplosionParticles = (x: number, y: number, container: Container) => {
+    const particles: Graphics[] = [];
+
+    // Create multiple explosion particles
+    for (let i = 0; i < 50; i++) {
+      const particle = new Graphics();
+
+      // Random colors for explosion
+      const colors = [0xFF4400, 0xFFAA00, 0xFFFF00, 0xFF0000, 0xFFCC00];
+      const color = colors[Math.floor(Math.random() * colors.length)];
+
+      particle.beginFill(color);
+      // Reduced particle size to match shorter rocket effect
+      particle.drawCircle(0, 0, Math.random() * 4 + 1);
+      particle.endFill();
+
+      // Position at explosion center
+      particle.x = x;
+      particle.y = y;
+
+      // Random velocity for each particle
+      (particle as any).vx = (Math.random() - 0.5) * 20;
+      (particle as any).vy = (Math.random() - 0.5) * 20;
+      (particle as any).gravity = 0.3;
+      (particle as any).life = 1.0;
+
+      container.addChild(particle);
+      particles.push(particle);
+    }
+
+    particlesRef.current = particles;
+
+    // Animate particles
+    const animateParticles = () => {
+      particles.forEach((particle, index) => {
+        if ((particle as any).life <= 0) {
+          container.removeChild(particle);
+          particles.splice(index, 1);
+          return;
+        }
+
+        // Move particle
+        particle.x += (particle as any).vx;
+        particle.y += (particle as any).vy;
+        (particle as any).vy += (particle as any).gravity;
+
+        // Fade out
+        (particle as any).life -= 0.02;
+        particle.alpha = (particle as any).life;
+
+        // Shrink
+        particle.scale.set((particle as any).life);
+      });
+
+      if (particles.length > 0) {
+        requestAnimationFrame(animateParticles);
+      }
+    };
+
+    animateParticles();
+  };
+
+  // Screen shake effect
+  const createScreenShake = (container: Container, intensity: number = 15, duration: number = 500) => {
+    const originalX = container.x;
+    const originalY = container.y;
+    let shakeTime = 0;
+
+    const shake = () => {
+      if (shakeTime < duration) {
+        const progress = shakeTime / duration;
+        const currentIntensity = intensity * (1 - progress);
+
+        container.x = originalX + (Math.random() - 0.5) * currentIntensity;
+        container.y = originalY + (Math.random() - 0.5) * currentIntensity;
+
+        shakeTime += 16; // ~60fps
+        requestAnimationFrame(shake);
+      } else {
+        container.x = originalX;
+        container.y = originalY;
+      }
+    };
+
+    shake();
+  };
+
+  // Create explosion rings effect
+  const createExplosionRings = (x: number, y: number, container: Container) => {
+    const rings: Graphics[] = [];
+
+    // Create multiple expanding rings
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => {
+        const ring = new Graphics();
+        ring.lineStyle(4, 0xFFAA00, 1);
+        ring.drawCircle(0, 0, 5);
+        ring.x = x;
+        ring.y = y;
+        ring.alpha = 1;
+
+        container.addChild(ring);
+        rings.push(ring);
+
+        // Animate ring expansion
+        const expandRing = () => {
+          ring.scale.x += 0.3;
+          ring.scale.y += 0.3;
+          ring.alpha -= 0.03;
+
+          if (ring.alpha > 0) {
+            requestAnimationFrame(expandRing);
+          } else {
+            container.removeChild(ring);
+          }
+        };
+
+        expandRing();
+      }, i * 100);
+    }
+  };
+
   // Handle shoot button
   const handleShoot = () => {
     if (gameState !== 'idle') return;
-    setGameState('preparing'); // Start with preparation phase
+    setGameState('shooting'); // Start directly with shooting
   };
 
   // Handle manual explosion
   const handleExplode = () => {
-    if (gameState !== 'preparing' && gameState !== 'shooting' && gameState !== 'flying') return;
+    if (gameState !== 'shooting' && gameState !== 'flying') return;
 
-    if (!rocketRef.current || !explosionRef.current) return;
+    if (!rocketRef.current || !explosionRef.current || !containerRef.current) return;
 
     const rocket = rocketRef.current;
     const explosion = explosionRef.current;
+    const container = containerRef.current;
+
+    // Create boom effects
+    createExplosionParticles(rocket.x, rocket.y, container);
+    createExplosionRings(rocket.x, rocket.y, container);
+    createScreenShake(container, 20, 800);
 
     // Hide rocket
     rocket.visible = false;
@@ -183,16 +307,19 @@ const PixiRocketLauncher: React.FC = () => {
     explosion.x = rocket.x;
     explosion.y = rocket.y;
     explosion.visible = true;
-    explosion.scale.set(3);
+    explosion.scale.set(4); // Make explosion bigger for more impact
     explosion.gotoAndPlay(0);
 
     setGameState('exploding');
+
+    // Play explosion sound effect (optional - you can add actual audio)
+    console.log("💥 BOOM! 💥");
 
     // Reset after explosion completes
     explosion.onComplete = () => {
       setTimeout(() => {
         resetRocket();
-      }, 1500);
+      }, 2000); // Longer delay to enjoy the effects
     };
   };
 
@@ -254,6 +381,5 @@ const PixiRocketLauncher: React.FC = () => {
       </div>
     </div>
   );
-};
-
+}
 export default PixiRocketLauncher;
