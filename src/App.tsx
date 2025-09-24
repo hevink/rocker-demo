@@ -9,7 +9,6 @@ const PixiRocketLauncher: React.FC = () => {
   const containerRef = useRef<Container | null>(null);
 
   const [gameState, setGameState] = useState<'idle' | 'preparing' | 'shooting' | 'flying' | 'exploding'>('idle');
-  const [rocketPosition, setRocketPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     const initPixi = async () => {
@@ -48,8 +47,6 @@ const PixiRocketLauncher: React.FC = () => {
 
       container.addChild(rocket);
       rocketRef.current = rocket;
-
-      setRocketPosition({ x: rocket.x, y: rocket.y });
 
       // Create explosion animation using fighter frames
       const explosionFrames = [];
@@ -133,8 +130,6 @@ const PixiRocketLauncher: React.FC = () => {
       if (rocket.y >= app.screen.height - 5) {
         setGameState('shooting');
       }
-
-      setRocketPosition({ x: rocket.x, y: rocket.y });
     }
 
     if (gameState === 'shooting') {
@@ -149,8 +144,6 @@ const PixiRocketLauncher: React.FC = () => {
       if (rocket.y <= app.screen.height / 2) {
         setGameState('flying');
       }
-
-      setRocketPosition({ x: rocket.x, y: rocket.y });
     }
 
     if (gameState === 'flying') {
@@ -165,8 +158,6 @@ const PixiRocketLauncher: React.FC = () => {
       if (rocket.y <= 50) {
         handleExplode();
       }
-
-      setRocketPosition({ x: rocket.x, y: rocket.y });
     }
   };
 
@@ -220,8 +211,6 @@ const PixiRocketLauncher: React.FC = () => {
 
     // Hide explosion
     explosion.visible = false;
-
-    setRocketPosition({ x: rocket.x, y: rocket.y });
     setGameState('idle');
   };
 
